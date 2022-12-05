@@ -37,5 +37,6 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
 # Create an HTTP server and listen on port 8080
 # Serve requests until process is killed
-httpd = HTTPServer(('localhost', 8080), SimpleHTTPRequestHandler)
+# Allow any IP to connect
+httpd = HTTPServer(('', 8080), SimpleHTTPRequestHandler)
 httpd.serve_forever()
