@@ -91,28 +91,20 @@ void sendFile(std::string path, std::string fileName){
 #endif
 
 	// Assemble a HTTP POST request
-	// FORMAT:
+	// Using the following format:
 	/*
 		POST / HTTP/1.1
-		Host: localhost:8080
-		Content-Type: multipart/form-data; boundary=MY_BOUNDARY
+		Host: [HOSTNAME]
+		Content-Type: application/octet-stream
+		Content-Disposition: attachment; filename="[FILENAME]"
 
-		--MY_BOUNDARY
-		Content-Disposition: form-data; name="file"; filename="myfile.txt"
-
-		[file data]
-		--MY_BOUNDARY--
+		[DATA]
 	*/
 	std::string request = "POST / HTTP/1.1\r\n";
 	request += "Host: " + std::string(szHost) + ":" + std::to_string(SERV_PORT) + "\r\n";
-	request += "Content-Type: multipart/form-data; boundary=MY_BOUNDARY\r\n\r\n";
-	request += "--MY_BOUNDARY\r\n";
-	request += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n\r\n";
-	std::string endRequest = "\r\n--MY_BOUNDARY--\r\n";
-	long unsigned int requestSize = (fileSize * sizeof(char)) +
-									(request.size() * sizeof(char)) +
-									(endRequest.size() * sizeof(char));
+	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=" + fileName + "\r\n\r\n";
 	
+	long unsigned int requestSize = fileSize + request.size();
 	char* requestBuffer = (char*)malloc(requestSize);
 	
 	for (int i = 0; i < request.size(); i++) {
@@ -122,10 +114,6 @@ void sendFile(std::string path, std::string fileName){
 		requestBuffer[i + request.size()] = data[i];
 	}
 	free(data);
-	for (int i = 0; i < endRequest.size(); i++) {
-		requestBuffer[i + request.size() + fileSize] = endRequest[i];
-	}
-	
 	// Send the HTTP POST request
 	int result = send(s, requestBuffer, requestSize, 0);
 	free(requestBuffer);
