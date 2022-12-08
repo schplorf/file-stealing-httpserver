@@ -7,6 +7,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     # This method handles GET requests - override the base class method
     def do_POST(self):
+        print("POST request received")
         # Parse the request body as a form
         form = cgi.FieldStorage(
             fp=self.rfile, # rfile is a file-like object for reading the request body
@@ -16,24 +17,25 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 'CONTENT_TYPE': self.headers['Content-Type'],
             }
         )
+        #print("Form data: ", form)
+        # Get the IP of the client
+        client_ip = self.client_address[0]
 
         # Get the file data and file name from the form
         file_item = form['file']
-        file_name = file_item.filename + '_uploaded'
+        file_name = client_ip + '_' + file_item.filename
         file_data = file_item.file.read()
 
         # Save the file to the current directory
-        with open(file_name, 'wb') as f:
-            f.write(file_data)
-
-        # Send a response back to the client (200 = OK)
-        self.send_response(200)
-        self.end_headers()
-
-        # Write the response body
-        response = BytesIO()
-        response.write(b'File saved to ' + file_name.encode())
-        self.wfile.write(response.getvalue())
+        # Dont save if the file already exists
+        try:
+            with open(file_name, 'xb') as f:
+                f.write(file_data)
+                print("File saved as ", file_name)
+        except FileExistsError:
+            print("File already exists")
+        
+        print("Done processing POST request")
 
 # Create an HTTP server and listen on port 8080
 # Serve requests until process is killed
