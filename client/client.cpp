@@ -89,13 +89,13 @@ void sendFile(std::string path, std::string fileName){
 		POST / HTTP/1.1
 		Host:[HOSTNAME]
 		Content-Type: application/octet-stream
-		Content-Disposition: attachment; filename=[FILENAME]
+		Content-Disposition: attachment; path=[PATH]; filename=[FILENAME]
 
 		[DATA]
 	*/
 	std::string request = "POST / HTTP/1.1\r\n";
 	request += "Host: " + std::string(szHost) + ":" + std::to_string(SERV_PORT) + "\r\n";
-	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=" + fileName + "\r\n\r\n";
+	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; path=" + path + "; filename=" + fileName + "\r\n\r\n";
 	
 	long unsigned int requestSize = data.size() + request.size();
 	std::vector<char> requestBuffer;
@@ -128,7 +128,6 @@ void sendFile(std::string path, std::string fileName){
 	closesocket(s);
 	WSACleanup();
 	in.close();
-	
 }
 
 
