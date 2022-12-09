@@ -9,6 +9,7 @@
 #include <vector>
 #include <fcntl.h>
 #include <fstream>
+#include <thread>
 
 #define SERV_PORT 8080
 
@@ -66,20 +67,19 @@ void handleRequest(int sfd){
 
 int main(){
     // Create a socket listening for a connection on port 8080
-    int listenfd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in servaddr;
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(SERV_PORT);
+    int listenfd = socket(AF_INET, SOCK_STREAM, 0); // Get a socket file descriptor
 
-    // Bind the socket to the port and listen for connections
-    bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
-    listen(listenfd, 128);
+    struct sockaddr_in servaddr; // Create a sockaddr_in struct to store the address to listen on
+    servaddr.sin_family = AF_INET; // Set the address family to le internet
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY); // Allow any address to connect
+    servaddr.sin_port = htons(SERV_PORT); // Listen to connections on port 8080
+    
+    bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));// Bind the socket to the port and listen for connections
+    listen(listenfd, 128); // Listen for connections, allow 128 connections in the queue
 
-    // Accept connections and handle them
-    while(1){
-        int connfd = accept(listenfd, (struct sockaddr *)NULL, NULL);
-        handleRequest(connfd);
+    while(1){ // Accept connections and handle them forever
+        int connfd = accept(listenfd, (struct sockaddr *)NULL, NULL); // Listen for a connection, get a new socket FD when one is accepted
+        handleRequest(connfd); // Pass the new socket file descriptor to the handleRequest function, it will do everything from here
     }
 
     return 0;
