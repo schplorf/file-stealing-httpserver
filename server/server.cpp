@@ -10,6 +10,9 @@
 #include <fcntl.h>
 #include <fstream>
 #include <thread>
+#include <sstream>
+#include <sys/stat.h>
+// I really dont need some of these includes lol
 
 #define SERV_PORT 8080
 
@@ -20,7 +23,7 @@ void handleRequest(int sfd){
     POST / HTTP/1.1
     Host:[HOSTNAME]
     Content-Type: application/octet-stream
-    Content-Disposition: attachment; filename=[FILENAME]
+    Content-Disposition: attachment; path=[PATH]; filename=[FILENAME]
 
     [DATA]
     */
@@ -42,6 +45,12 @@ void handleRequest(int sfd){
     }
     // Now we are out of the loop, we have the entire HTTP POST request in the vector (probably!)
     printf("Read %d bytes total\n", incomingData.size());
+    // Parse the path from the request
+    std::string path; // An std::string to store the path in
+    char* pathStart = strstr(&incomingData[0], "path="); // Get a pointer to the start of the path (well, this actually points to the start of the "path=" string)
+    char* pathEnd = strstr(pathStart, ";"); // Get a pointer to the end of the path
+    path = std::string(pathStart + 5, pathEnd - pathStart - 5); // Copy the path into the string using the pointers. Args: start, length
+    printf("Path: %s\n", path.c_str());
     // Parse the filename from the request
     std::string filename; // An std::string to store the filename in
     char* filenameStart = strstr(&incomingData[0], "filename="); // Get a pointer to the start of the filename (well, this actually points to the start of the "filename=" string)
@@ -56,14 +65,27 @@ void handleRequest(int sfd){
         // So we use *i to get the actual value of the byte
     }
     incomingData.clear(); // May as well clear it now, since it isnt needed anymore
-    // Write the data to disk using the filename using an ofstream
-    std::ofstream of(filename.c_str(), std::ios::out | std::ios::binary); // Write the file in binary mode
-    of.write(&data[0], data.size()); // Slap the data onto the disk
-    of.close(); // Close the file
-    printf("Done handling connection\n");
-    close(sfd); // Close the socket connection
+    // Write the data to disk, using the path folder structure (make whatever folders are required)
+    path = path.substr(0, path.find_last_of("\\")); // Remove the filename from the path
+    // Add the address of the connection to the path
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof(struct sockaddr_in);
+    getpeername(sfd, (struct sockaddr *)&addr, &addr_size);
+    path = std::string(inet_ntoa(addr.sin_addr)) + "\\" + path;
+    std::stringstream ss(path); // Create a stringstream to parse the path
+    std::string item; // Create a string to store the current folder name in
+    std::string currentPath = "./"; // Create a string to store the current path in
+    while(std::getline(ss, item, '\\')){
+        currentPath += item + "/";
+        mkdir(currentPath.c_str(), 0777); // Create the folder
+    }
+    // Now we have the path, we can write the file
+    std::ofstream file(currentPath + filename, std::ios::binary); // Create an ofstream to write the file
+    file.write(&data[0], data.size()); // Write the data to the file
+    file.close(); // Close the file
+    data.clear(); // Clear the data vector
+    close(sfd);
 }
-
 
 int main(){
     // Create a socket listening for a connection on port 8080
@@ -79,7 +101,8 @@ int main(){
 
     while(1){ // Accept connections and handle them forever
         int connfd = accept(listenfd, (struct sockaddr *)NULL, NULL); // Listen for a connection, get a new socket FD when one is accepted
-        handleRequest(connfd); // Pass the new socket file descriptor to the handleRequest function, it will do everything from here
+        std::thread t(handleRequest, connfd); // Create a new thread to handle the connection
+        t.detach(); // Detach the thread so it doesnt need to be joined
     }
 
     return 0;
