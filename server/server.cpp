@@ -8,9 +8,52 @@
 #include <string>
 #include <vector>
 #include <fcntl.h>
+#include <fstream>
 
 #define SERV_PORT 8080
 
+// Handles an incoming connection.
+void handleRequest(int sfd){
+    // The client will send the following:
+    /*
+    POST / HTTP/1.1
+    Host:[HOSTNAME]
+    Content-Type: application/octet-stream
+    Content-Disposition: attachment; filename=[FILENAME]
+
+    [DATA]
+    */
+    printf("Handling incoming connection... Reading data...\n");
+    std::vector<char> incomingData; // The data from the client
+    while(1){
+        char buffer[1024];
+        int bytesRead = read(sfd, buffer, 1024);
+        if(bytesRead == 0){
+            break;
+        }
+        for(int i = 0; i < bytesRead; i++){
+            incomingData.push_back(buffer[i]);
+        }
+    }
+    printf("Read %d bytes total\n", incomingData.size());
+    // Parse the filename from the request
+    std::string filename;
+    char* filenameStart = strstr(&incomingData[0], "filename=");
+    char* filenameEnd = strstr(filenameStart, "\r\n\r\n");
+    filename = std::string(filenameStart + 9, filenameEnd - filenameStart - 9);
+    printf("Filename: %s\n", filename.c_str());
+    // Parse the data from the request into a new vector
+    std::vector<char> data;
+    for(char* i = filenameEnd + 4; i != &incomingData[incomingData.size() - 1]; i++){
+        data.push_back(*i);
+    }
+    incomingData.clear(); // May as well clear it now, since it isnt needed anymore
+    // Write the data to disk using the filename:
+    std::ofstream of(filename.c_str(), std::ios::out | std::ios::binary);
+    of.write(&data[0], data.size());
+    of.close();
+    printf("Done handling connection\n");
+}
 
 
 int main(){
@@ -20,66 +63,16 @@ int main(){
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(SERV_PORT);
+
+    // Bind the socket to the port and listen for connections
     bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
-    listen(listenfd, 1);
+    listen(listenfd, 128);
 
-    // Accept a connection
-    int connfd = accept(listenfd, (struct sockaddr *)NULL, NULL);
-    
-    // Read the message from the client
-    // The message will be a HTTP POST request in the following format:
-    /*
-    POST / HTTP/1.1
-    Host:[HOSTNAME]
-    Content-Type: application/octet-stream
-    Content-Disposition: attachment; filename=[FILENAME]
-
-    [DATA]
-    */
-    // Read the request into a std::vector<char>
-
-    std::vector<char> incomingData;
+    // Accept connections and handle them
     while(1){
-        char buffer[1024];
-        int bytesRead = read(connfd, buffer, 1024);
-        printf("Read %d bytes\n", bytesRead);
-        if(bytesRead == 0){
-            break;
-        }
-        for(int i = 0; i < bytesRead; i++){
-            incomingData.push_back(buffer[i]);
-        }
+        int connfd = accept(listenfd, (struct sockaddr *)NULL, NULL);
+        handleRequest(connfd);
     }
-    printf("Read %d bytes total\n", incomingData.size());
-    for(auto i = incomingData.begin(); i != incomingData.end(); i++){
-        printf("%c", *i);
-    }
-    printf("\n");
-
-
-    // Parse the filename from the request
-    std::string filename;
-
-    char* filenameStart = strstr(&incomingData[0], "filename=");
-    // Read until the next newline
-    char* filenameEnd = strstr(filenameStart, "\r\n");
-    filename = std::string(filenameStart + 9, filenameEnd - filenameStart - 9);
-    printf("Filename: %s\n", filename.c_str());
-
-    // Parse the data from the request
-
-    // Find the start of the data (marked by the end of the filename)
-    // Read until the end of the request
-
-    std::vector<char> data;
-    for(char* i = filenameEnd + 2; i != &incomingData[incomingData.size() - 1]; i++){
-        data.push_back(*i);
-    }
-    // Write the data to disk using the filename
-    int fd = open(filename.c_str(), O_WRONLY | O_CREAT, 0666);
-    write(fd, &data[0], data.size());
-    close(fd);
-
 
     return 0;
 }
