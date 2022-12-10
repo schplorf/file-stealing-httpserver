@@ -16,76 +16,133 @@
 
 #define SERV_PORT 8080
 
-// Handles an incoming connection.
-void handleRequest(int sfd){
-    // The client will send the following:
-    /*
+
+// Request format:
+/*
     POST / HTTP/1.1
     Host:[HOSTNAME]
     Content-Type: application/octet-stream
     Content-Disposition: attachment; path=[PATH]; filename=[FILENAME]
 
     [DATA]
-    */
-    printf("Handling incoming connection... Reading data...\n");
-    std::vector<char> incomingData; // The data from the client
+*/
+
+
+
+
+
+/*
+    Reads data from the socket sfd into the std::vector<char> data.
+    Reads until connection is closed
+*/
+void readData(std::vector<char>& d, int s){
     while(1){
-        char buffer[16284]; // Create a buffer to store a chunk of data
-        int bytesRead = read(sfd, buffer, 16284); // Read the data from the socket connection into the buffer.
-        // Note: The socket isnt set to non-blocking, so this will block until data is available or the connection is closed.
-        // This should ideally be changed, or this function should be run in a separate thread (DOS attack on this server would be easy right now)
-        if(bytesRead == 0){ // If the connection is closed, break out of the loop
-            break;
+        char buffer[16284]; // A buffer to store each chunk of data in
+        int bytesRead = read(s, buffer, 16284); // Read a maximum of 16284 bytes into the buffer
+        if(bytesRead == 0){ // If no data was read, the connection was closed
+            break; // So exit the loop
         }
-        // If we do have some bytes, push them onto the vector
-        // I should probably use reserve, might add that later
-        for(int i = 0; i < bytesRead; i++){
-            incomingData.push_back(buffer[i]); // Push the data onto the vector byte by byte
+        for(int i=0; i<bytesRead; i++){
+            d.push_back(buffer[i]); // Push the chunk of data onto the vector (passed by reference)
         }
     }
-    // Now we are out of the loop, we have the entire HTTP POST request in the vector (probably!)
-    printf("Read %d bytes total\n", incomingData.size());
-    // Parse the path from the request
-    std::string path; // An std::string to store the path in
-    char* pathStart = strstr(&incomingData[0], "path="); // Get a pointer to the start of the path (well, this actually points to the start of the "path=" string)
-    char* pathEnd = strstr(pathStart, ";"); // Get a pointer to the end of the path
-    path = std::string(pathStart + 5, pathEnd - pathStart - 5); // Copy the path into the string using the pointers. Args: start, length
-    printf("Path: %s\n", path.c_str());
-    // Parse the filename from the request
-    std::string filename; // An std::string to store the filename in
-    char* filenameStart = strstr(&incomingData[0], "filename="); // Get a pointer to the start of the filename (well, this actually points to the start of the "filename=" string)
-    char* filenameEnd = strstr(filenameStart, "\r\n\r\n"); // Get a pointer to the end of the filename (actually the start of the "\r\n\r\n")
-    filename = std::string(filenameStart + 9, filenameEnd - filenameStart - 9); // Copy the filename into the string using the pointers. Args: start, length
-    printf("Filename: %s\n", filename.c_str());
-    // Parse the data from the request into a new vector
-    std::vector<char> data;
-    for(char* i = filenameEnd + 4; i != &incomingData[incomingData.size() - 1]; i++){
-        data.push_back(*i); // Go through the vector byte by byte and copy the data into the new vector
-        // In this loop, i is a pointer to the current byte in the vector instead of an iterator
-        // So we use *i to get the actual value of the byte
+    printf("Read %d bytes from socket %d\n", d.size(), s);
+}
+
+/*
+    Extracts the path from a POST request
+    NEEDS ERROR HANDLING!
+*/
+std::string extractPath(std::vector<char>& d){
+    char* pathStart = strstr(&d[0], "path="); // Get a pointer to the start of the string "path=" inside the data
+    pathStart += 5; // Move the pointer up to past the "path=" to the start of the actual path
+    char* pathEnd = strstr(&pathStart[0], ";"); // Get a pointer to the ; that comes right after the path
+    return std::string(pathStart, pathEnd-pathStart); // Create a string, starting at pathStart, with length pathEnd-pathStart
+}
+
+/*
+    Extracts the filename from a POST request
+    NEEDS ERROR HANDLING!
+*/
+std::string extractFilename(std::vector<char>& d){
+    char* filenameStart = strstr(&d[0], "filename="); // Get pointer to start of the string "filename=" inside data
+    filenameStart += 9; // Increment to get a pointer to the start of the filename
+    char* filenameEnd = strstr(&d[0], "\r\n\r\n"); // Get a pointer to the end of the filename (known to be at \r\n\r\n)
+    return std::string(filenameStart, filenameEnd-filenameStart); // Create a string starting at filenameStart with length filenameEnd-filenameStart
+}
+
+/*
+    Extracts the data from a POST request
+    NEEDS ERROR HANDLING!
+*/
+std::vector<char> extractData(std::vector<char>& d){
+    std::vector<char> extractedData; // Used to store the binary data from the POST request
+    char* p = strstr(&d[0], "filename=");
+    p = strstr(&p[0], "\r\n\r\n");
+    for(char* i = p+4; i!= &d[d.size()-1]; i++){
+        extractedData.push_back(*i);
     }
-    incomingData.clear(); // May as well clear it now, since it isnt needed anymore
-    // Write the data to disk, using the path folder structure (make whatever folders are required)
-    path = path.substr(0, path.find_last_of("\\")); // Remove the filename from the path
-    // Add the address of the connection to the path
+    return extractedData;
+}
+
+/*
+    Gets an std::string of the IP of a connection
+    NEEDS ERROR HANDLING!
+*/
+std::string getClientAddr(int s){
     struct sockaddr_in addr;
     socklen_t addr_size = sizeof(struct sockaddr_in);
-    getpeername(sfd, (struct sockaddr *)&addr, &addr_size);
-    path = std::string(inet_ntoa(addr.sin_addr)) + "\\" + path;
-    std::stringstream ss(path); // Create a stringstream to parse the path
-    std::string item; // Create a string to store the current folder name in
-    std::string currentPath = "./"; // Create a string to store the current path in
-    while(std::getline(ss, item, '\\')){
-        currentPath += item + "/";
-        mkdir(currentPath.c_str(), 0777); // Create the folder
-    }
-    // Now we have the path, we can write the file
-    std::ofstream file(currentPath + filename, std::ios::binary); // Create an ofstream to write the file
-    file.write(&data[0], data.size()); // Write the data to the file
-    file.close(); // Close the file
-    data.clear(); // Clear the data vector
-    close(sfd);
+    getpeername(s, (struct sockaddr *)&addr, &addr_size);
+    return std::string(inet_ntoa(addr.sin_addr));
 }
+
+void writeToDisk(std::vector<char>& d, std::string p, std::string f, int s){
+    std::stringstream ss(p);
+    std::string folder;
+    std::string currentPath = "./";
+    while(std::getline(ss, folder, '\\')){
+        currentPath += folder + "/";
+        mkdir(currentPath.c_str(), 0777);
+    }
+    // Now that the path is set up, actuall write the data to the disk
+    std::ofstream of(currentPath + f, std::ios::binary);
+    of.write(&d[0], d.size());
+    of.close();
+}
+
+// Handles an incoming connection.
+void handleRequest(int sfd){
+    std::string clientAddr = getClientAddr(sfd);
+    printf("Handling incoming connection from %s\n", clientAddr.c_str());
+
+    // Read into the request vector until the connection is closed
+    std::vector<char> request;
+    readData(request, sfd);
+    close(sfd); // Close the socket,
+
+    // Parse the path from the request
+    std::string path = extractPath(request);
+    printf("Path: %s\n", path.c_str());
+    // Remove filename from the path, add the address of the client to the start
+    path = path.substr(0, path.find_last_of("\\"));
+    path = clientAddr + "\\" + path;
+
+    // Parse the filename from the request
+    std::string filename = extractFilename(request);
+    printf("Filename: %s\n", filename.c_str());
+
+    // Get the real binary data from the request
+    std::vector<char> data = extractData(request);
+    request.clear(); // May as well clear it now, since it isnt needed anymore
+
+    // Write the binary data as a file to disk, at the location "./" + path 
+    writeToDisk(data, path, filename, sfd);
+
+    // Cleanup:
+    data.clear(); // Clear the data vector (dit goes out of scope here, so this probably is unnecessary)
+}
+
+
 
 int main(){
     // Create a socket listening for a connection on port 8080
