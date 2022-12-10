@@ -78,6 +78,7 @@ std::string extractFilename(std::vector<char>& d){
 */
 std::vector<char> extractData(std::vector<char>& d){
     std::vector<char> extractedData; // Used to store the binary data from the POST request
+    if(d.size() == 0){ return extractedData; }
     char* p = strstr(&d[0], "filename=");
     p = strstr(&p[0], "\r\n\r\n");
     if(p+4 > &d[d.size()-1]){
