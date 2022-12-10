@@ -51,6 +51,7 @@ void readData(std::vector<char>& d, int s){
 
 /*
     Extracts the path from a POST request
+    STILL NEEDS MORE ERROR HANDLING
 */
 std::string extractPath(std::vector<char>& d){
     if(d.size() == 0) {return "ERRORPATH\\ERROR";}
@@ -62,6 +63,7 @@ std::string extractPath(std::vector<char>& d){
 
 /*
     Extracts the filename from a POST request
+    STILL NEEDS MORE ERROR HANDLING
 */
 std::string extractFilename(std::vector<char>& d){
     if(d.size() == 0) {return "ERRORFILENAME"; }
