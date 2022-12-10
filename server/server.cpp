@@ -73,12 +73,14 @@ std::string extractFilename(std::vector<char>& d){
 
 /*
     Extracts the data from a POST request
-    NEEDS ERROR HANDLING!
 */
 std::vector<char> extractData(std::vector<char>& d){
     std::vector<char> extractedData; // Used to store the binary data from the POST request
     char* p = strstr(&d[0], "filename=");
     p = strstr(&p[0], "\r\n\r\n");
+    if(p+4 > &d[d.size()-1]){
+        return extractedData;
+    }
     for(char* i = p+4; i!= &d[d.size()-1]; i++){
         extractedData.push_back(*i);
     }
