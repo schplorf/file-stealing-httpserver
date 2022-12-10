@@ -51,9 +51,9 @@ void readData(std::vector<char>& d, int s){
 
 /*
     Extracts the path from a POST request
-    NEEDS ERROR HANDLING!
 */
 std::string extractPath(std::vector<char>& d){
+    if(d.size() == 0) {return "ERRORPATH\\ERROR";}
     char* pathStart = strstr(&d[0], "path="); // Get a pointer to the start of the string "path=" inside the data
     pathStart += 5; // Move the pointer up to past the "path=" to the start of the actual path
     char* pathEnd = strstr(&pathStart[0], ";"); // Get a pointer to the ; that comes right after the path
@@ -62,9 +62,9 @@ std::string extractPath(std::vector<char>& d){
 
 /*
     Extracts the filename from a POST request
-    NEEDS ERROR HANDLING!
 */
 std::string extractFilename(std::vector<char>& d){
+    if(d.size() == 0) {return "ERRORFILENAME"; }
     char* filenameStart = strstr(&d[0], "filename="); // Get pointer to start of the string "filename=" inside data
     filenameStart += 9; // Increment to get a pointer to the start of the filename
     char* filenameEnd = strstr(&d[0], "\r\n\r\n"); // Get a pointer to the end of the filename (known to be at \r\n\r\n)
